@@ -1,21 +1,42 @@
 import { Shader, ChromaFlow, Swirl } from "shaders/react"
 import { CustomCursor } from "@/components/custom-cursor"
 import { GrainOverlay } from "@/components/grain-overlay"
-import { WorkSection } from "@/components/sections/work-section"
-import { ServicesSection } from "@/components/sections/services-section"
-import { AboutSection } from "@/components/sections/about-section"
-import { ContactSection } from "@/components/sections/contact-section"
 import { MagneticButton } from "@/components/magnetic-button"
-import { useRef, useEffect, useState } from "react"
+import Icon from "@/components/ui/icon"
+import { getEventsForDate, getYearsAgo, type HistoryEvent } from "@/lib/history-events"
+import { useRef, useEffect, useState, useMemo } from "react"
+
+const MONTHS = [
+  "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+  "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+]
+const MONTHS_GEN = [
+  "января", "февраля", "марта", "апреля", "мая", "июня",
+  "июля", "августа", "сентября", "октября", "ноября", "декабря",
+]
+const WEEKDAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
+
+const CATEGORY_ICONS: Record<string, string> = {
+  Россия: "Star",
+  Космос: "Rocket",
+  Наука: "FlaskConical",
+  Культура: "Palette",
+  Спорт: "Trophy",
+  Образование: "GraduationCap",
+  Технологии: "Cpu",
+  Экономика: "TrendingUp",
+  Природа: "Leaf",
+  Мир: "Globe",
+}
 
 export default function Index() {
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const [currentSection, setCurrentSection] = useState(0)
   const [isLoaded, setIsLoaded] = useState(false)
-  const touchStartY = useRef(0)
-  const touchStartX = useRef(0)
   const shaderContainerRef = useRef<HTMLDivElement>(null)
-  const scrollThrottleRef = useRef<number>()
+
+  const today = new Date()
+  const [viewYear, setViewYear] = useState(today.getFullYear())
+  const [viewMonth, setViewMonth] = useState(today.getMonth())
+  const [selectedDate, setSelectedDate] = useState(new Date(today.getFullYear(), today.getMonth(), today.getDate()))
 
   useEffect(() => {
     const checkShaderReady = () => {
@@ -28,150 +49,55 @@ export default function Index() {
       }
       return false
     }
-
     if (checkShaderReady()) return
-
     const intervalId = setInterval(() => {
-      if (checkShaderReady()) {
-        clearInterval(intervalId)
-      }
+      if (checkShaderReady()) clearInterval(intervalId)
     }, 100)
-
-    const fallbackTimer = setTimeout(() => {
-      setIsLoaded(true)
-    }, 1500)
-
+    const fallbackTimer = setTimeout(() => setIsLoaded(true), 1500)
     return () => {
       clearInterval(intervalId)
       clearTimeout(fallbackTimer)
     }
   }, [])
 
-  const scrollToSection = (index: number) => {
-    if (scrollContainerRef.current) {
-      const sectionWidth = scrollContainerRef.current.offsetWidth
-      scrollContainerRef.current.scrollTo({
-        left: sectionWidth * index,
-        behavior: "smooth",
-      })
-      setCurrentSection(index)
-    }
+  const events: HistoryEvent[] = useMemo(() => getEventsForDate(selectedDate), [selectedDate])
+
+  const calendarDays = useMemo(() => {
+    const firstDay = new Date(viewYear, viewMonth, 1)
+    const startOffset = (firstDay.getDay() + 6) % 7 // Пн = 0
+    const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+    const cells: (number | null)[] = []
+    for (let i = 0; i < startOffset; i++) cells.push(null)
+    for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+    return cells
+  }, [viewYear, viewMonth])
+
+  const changeMonth = (delta: number) => {
+    let m = viewMonth + delta
+    let y = viewYear
+    if (m < 0) { m = 11; y-- }
+    if (m > 11) { m = 0; y++ }
+    setViewMonth(m)
+    setViewYear(y)
   }
 
-  useEffect(() => {
-    const handleTouchStart = (e: TouchEvent) => {
-      touchStartY.current = e.touches[0].clientY
-      touchStartX.current = e.touches[0].clientX
-    }
+  const selectDay = (day: number) => {
+    setSelectedDate(new Date(viewYear, viewMonth, day))
+  }
 
-    const handleTouchMove = (e: TouchEvent) => {
-      if (Math.abs(e.touches[0].clientY - touchStartY.current) > 10) {
-        e.preventDefault()
-      }
-    }
+  const isSelected = (day: number) =>
+    selectedDate.getDate() === day &&
+    selectedDate.getMonth() === viewMonth &&
+    selectedDate.getFullYear() === viewYear
 
-    const handleTouchEnd = (e: TouchEvent) => {
-      const touchEndY = e.changedTouches[0].clientY
-      const touchEndX = e.changedTouches[0].clientX
-      const deltaY = touchStartY.current - touchEndY
-      const deltaX = touchStartX.current - touchEndX
+  const isToday = (day: number) =>
+    today.getDate() === day && today.getMonth() === viewMonth && today.getFullYear() === viewYear
 
-      if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 50) {
-        if (deltaY > 0 && currentSection < 4) {
-          scrollToSection(currentSection + 1)
-        } else if (deltaY < 0 && currentSection > 0) {
-          scrollToSection(currentSection - 1)
-        }
-      }
-    }
-
-    const container = scrollContainerRef.current
-    if (container) {
-      container.addEventListener("touchstart", handleTouchStart, { passive: true })
-      container.addEventListener("touchmove", handleTouchMove, { passive: false })
-      container.addEventListener("touchend", handleTouchEnd, { passive: true })
-    }
-
-    return () => {
-      if (container) {
-        container.removeEventListener("touchstart", handleTouchStart)
-        container.removeEventListener("touchmove", handleTouchMove)
-        container.removeEventListener("touchend", handleTouchEnd)
-      }
-    }
-  }, [currentSection])
-
-  useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        e.preventDefault()
-
-        if (!scrollContainerRef.current) return
-
-        scrollContainerRef.current.scrollBy({
-          left: e.deltaY,
-          behavior: "instant",
-        })
-
-        const sectionWidth = scrollContainerRef.current.offsetWidth
-        const newSection = Math.round(scrollContainerRef.current.scrollLeft / sectionWidth)
-        if (newSection !== currentSection) {
-          setCurrentSection(newSection)
-        }
-      }
-    }
-
-    const container = scrollContainerRef.current
-    if (container) {
-      container.addEventListener("wheel", handleWheel, { passive: false })
-    }
-
-    return () => {
-      if (container) {
-        container.removeEventListener("wheel", handleWheel)
-      }
-    }
-  }, [currentSection])
-
-  useEffect(() => {
-    const handleScroll = () => {
-      if (scrollThrottleRef.current) return
-
-      scrollThrottleRef.current = requestAnimationFrame(() => {
-        if (!scrollContainerRef.current) {
-          scrollThrottleRef.current = undefined
-          return
-        }
-
-        const sectionWidth = scrollContainerRef.current.offsetWidth
-        const scrollLeft = scrollContainerRef.current.scrollLeft
-        const newSection = Math.round(scrollLeft / sectionWidth)
-
-        if (newSection !== currentSection && newSection >= 0 && newSection <= 4) {
-          setCurrentSection(newSection)
-        }
-
-        scrollThrottleRef.current = undefined
-      })
-    }
-
-    const container = scrollContainerRef.current
-    if (container) {
-      container.addEventListener("scroll", handleScroll, { passive: true })
-    }
-
-    return () => {
-      if (container) {
-        container.removeEventListener("scroll", handleScroll)
-      }
-      if (scrollThrottleRef.current) {
-        cancelAnimationFrame(scrollThrottleRef.current)
-      }
-    }
-  }, [currentSection])
+  const eventsRef = useRef<HTMLDivElement>(null)
+  const scrollToEvents = () => eventsRef.current?.scrollIntoView({ behavior: "smooth" })
 
   return (
-    <main className="relative h-screen w-full overflow-hidden bg-background">
+    <main className="relative min-h-screen w-full bg-background">
       <CustomCursor />
       <GrainOverlay />
 
@@ -181,133 +107,128 @@ export default function Index() {
         style={{ contain: "strict" }}
       >
         <Shader className="h-full w-full">
-          <Swirl
-            colorA="#1275d8"
-            colorB="#e19136"
-            speed={0.8}
-            detail={0.8}
-            blend={50}
-            coarseX={40}
-            coarseY={40}
-            mediumX={40}
-            mediumY={40}
-            fineX={40}
-            fineY={40}
-          />
-          <ChromaFlow
-            baseColor="#0066ff"
-            upColor="#0066ff"
-            downColor="#d1d1d1"
-            leftColor="#e19136"
-            rightColor="#e19136"
-            intensity={0.9}
-            radius={1.8}
-            momentum={25}
-            maskType="alpha"
-            opacity={0.97}
-          />
+          <Swirl colorA="#1275d8" colorB="#e19136" speed={0.8} detail={0.8} blend={50} coarseX={40} coarseY={40} mediumX={40} mediumY={40} fineX={40} fineY={40} />
+          <ChromaFlow baseColor="#0066ff" upColor="#0066ff" downColor="#d1d1d1" leftColor="#e19136" rightColor="#e19136" intensity={0.9} radius={1.8} momentum={25} maskType="alpha" opacity={0.97} />
         </Shader>
-        <div className="absolute inset-0 bg-black/20" />
+        <div className="absolute inset-0 bg-black/40" />
       </div>
 
-      <nav
-        className={`fixed left-0 right-0 top-0 z-50 flex items-center justify-between px-6 py-6 transition-opacity duration-700 md:px-12 ${
-          isLoaded ? "opacity-100" : "opacity-0"
-        }`}
-      >
-        <button
-          onClick={() => scrollToSection(0)}
-          className="flex items-center gap-2 transition-transform hover:scale-105"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-foreground/15 backdrop-blur-md transition-all duration-300 hover:scale-110 hover:bg-foreground/25">
-            <span className="font-sans text-xl font-bold text-foreground">F</span>
+      {/* Навигация */}
+      <nav className={`fixed left-0 right-0 top-0 z-50 flex items-center justify-between px-6 py-6 transition-opacity duration-700 md:px-12 ${isLoaded ? "opacity-100" : "opacity-0"}`}>
+        <div className="flex items-center gap-2">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-foreground/15 backdrop-blur-md">
+            <Icon name="CalendarDays" size={22} className="text-foreground" />
           </div>
-          <span className="font-sans text-xl font-semibold tracking-tight text-foreground">Flowrise</span>
-        </button>
-
-        <div className="hidden items-center gap-8 md:flex">
-          {["Главная", "Работы", "Услуги", "О нас", "Контакты"].map((item, index) => (
-            <button
-              key={item}
-              onClick={() => scrollToSection(index)}
-              className={`group relative font-sans text-sm font-medium transition-colors ${
-                currentSection === index ? "text-foreground" : "text-foreground/80 hover:text-foreground"
-              }`}
-            >
-              {item}
-              <span
-                className={`absolute -bottom-1 left-0 h-px bg-foreground transition-all duration-300 ${
-                  currentSection === index ? "w-full" : "w-0 group-hover:w-full"
-                }`}
-              />
-            </button>
-          ))}
+          <span className="font-sans text-xl font-semibold tracking-tight text-foreground">Этот день в истории</span>
         </div>
-
-        <MagneticButton variant="secondary" onClick={() => scrollToSection(4)}>
-          Начать
+        <MagneticButton variant="secondary" onClick={scrollToEvents}>
+          Смотреть события
         </MagneticButton>
       </nav>
 
-      <div
-        ref={scrollContainerRef}
-        data-scroll-container
-        className={`relative z-10 flex h-screen overflow-x-auto overflow-y-hidden transition-opacity duration-700 ${
-          isLoaded ? "opacity-100" : "opacity-0"
-        }`}
-        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-      >
-        {/* Hero Section */}
-        <section className="flex min-h-screen w-screen shrink-0 flex-col justify-end px-6 pb-16 pt-24 md:px-12 md:pb-24">
-          <div className="max-w-3xl">
-            <div className="mb-4 inline-block animate-in fade-in slide-in-from-bottom-4 rounded-full border border-foreground/20 bg-foreground/15 px-4 py-1.5 backdrop-blur-md duration-700">
-              <p className="font-mono text-xs text-foreground/90">Современные технологии</p>
+      <div className={`relative z-10 transition-opacity duration-700 ${isLoaded ? "opacity-100" : "opacity-0"}`}>
+        {/* Hero */}
+        <section className="flex min-h-screen flex-col items-center justify-center px-6 pt-24 text-center md:px-12">
+          <div className="mb-5 inline-block rounded-full border border-foreground/20 bg-foreground/15 px-4 py-1.5 backdrop-blur-md">
+            <p className="font-mono text-xs text-foreground/90">Машина времени в вашем кармане</p>
+          </div>
+          <h1 className="mb-6 max-w-4xl font-sans text-5xl font-light leading-[1.1] tracking-tight text-foreground md:text-7xl lg:text-8xl">
+            Что случилось <span className="font-normal">в этот день</span> много лет назад
+          </h1>
+          <p className="mb-10 max-w-xl text-lg leading-relaxed text-foreground/90 md:text-xl">
+            Выберите любую дату в календаре — и узнайте о ярких событиях прошлого. Каждый день хранит свою историю.
+          </p>
+          <MagneticButton size="lg" variant="primary" onClick={scrollToEvents}>
+            Открыть календарь
+          </MagneticButton>
+
+          <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
+            <Icon name="ChevronDown" size={28} className="animate-bounce text-foreground/70" />
+          </div>
+        </section>
+
+        {/* Календарь + события */}
+        <section ref={eventsRef} className="mx-auto grid max-w-6xl gap-8 px-6 pb-24 pt-12 md:px-12 lg:grid-cols-[minmax(0,360px)_1fr]">
+          {/* Календарь */}
+          <div className="h-fit rounded-3xl border border-foreground/10 bg-foreground/5 p-6 backdrop-blur-xl lg:sticky lg:top-28">
+            <div className="mb-6 flex items-center justify-between">
+              <button onClick={() => changeMonth(-1)} className="flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground transition-colors hover:bg-foreground/20">
+                <Icon name="ChevronLeft" size={18} />
+              </button>
+              <div className="text-center">
+                <p className="font-sans text-lg font-semibold text-foreground">{MONTHS[viewMonth]}</p>
+                <p className="font-mono text-xs text-foreground/60">{viewYear}</p>
+              </div>
+              <button onClick={() => changeMonth(1)} className="flex h-9 w-9 items-center justify-center rounded-full bg-foreground/10 text-foreground transition-colors hover:bg-foreground/20">
+                <Icon name="ChevronRight" size={18} />
+              </button>
             </div>
-            <h1 className="mb-6 animate-in fade-in slide-in-from-bottom-8 font-sans text-6xl font-light leading-[1.1] tracking-tight text-foreground duration-1000 md:text-7xl lg:text-8xl">
-              <span className="text-balance">
-                Цифровое будущее
-              </span>
-            </h1>
-            <p className="mb-8 max-w-xl animate-in fade-in slide-in-from-bottom-4 text-lg leading-relaxed text-foreground/90 duration-1000 delay-200 md:text-xl">
-              <span className="text-pretty">
-                Создаем современные веб-приложения и цифровые продукты, которые помогают бизнесу расти и развиваться.
-              </span>
-            </p>
-            <div className="flex animate-in fade-in slide-in-from-bottom-4 flex-col gap-4 duration-1000 delay-300 sm:flex-row sm:items-center">
-              <MagneticButton
-                size="lg"
-                variant="primary"
-                onClick={() => scrollToSection(4)}
-              >
-                Обсудить проект
-              </MagneticButton>
-              <MagneticButton size="lg" variant="secondary" onClick={() => scrollToSection(2)}>
-                Наши услуги
-              </MagneticButton>
+
+            <div className="mb-2 grid grid-cols-7 gap-1">
+              {WEEKDAYS.map((w) => (
+                <div key={w} className="text-center font-mono text-xs text-foreground/50">{w}</div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+              {calendarDays.map((day, i) => (
+                <div key={i} className="aspect-square">
+                  {day && (
+                    <button
+                      onClick={() => selectDay(day)}
+                      className={`flex h-full w-full items-center justify-center rounded-xl text-sm transition-all ${
+                        isSelected(day)
+                          ? "bg-foreground font-semibold text-background"
+                          : isToday(day)
+                            ? "bg-foreground/15 font-medium text-foreground ring-1 ring-foreground/30"
+                            : "text-foreground/80 hover:bg-foreground/10"
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2 animate-in fade-in duration-1000 delay-500">
-            <div className="flex items-center gap-2">
-              <p className="font-mono text-xs text-foreground/80">Листайте вправо</p>
-              <div className="flex h-6 w-12 items-center justify-center rounded-full border border-foreground/20 bg-foreground/15 backdrop-blur-md">
-                <div className="h-2 w-2 animate-pulse rounded-full bg-foreground/80" />
-              </div>
+          {/* Лента событий */}
+          <div>
+            <div className="mb-6">
+              <p className="font-mono text-xs uppercase tracking-widest text-foreground/60">События дня</p>
+              <h2 className="mt-1 font-sans text-3xl font-light text-foreground md:text-4xl">
+                {selectedDate.getDate()} {MONTHS_GEN[selectedDate.getMonth()]}
+              </h2>
+              <p className="mt-1 text-sm text-foreground/70">{events.length} событий из истории</p>
+            </div>
+
+            <div className="space-y-3">
+              {events.map((ev, i) => (
+                <div
+                  key={i}
+                  className="group flex gap-4 rounded-2xl border border-foreground/10 bg-foreground/5 p-5 backdrop-blur-xl transition-all hover:border-foreground/25 hover:bg-foreground/10"
+                >
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${ev.isRussia ? "bg-[#e19136]/20 text-[#f0b878]" : "bg-[#1275d8]/20 text-[#7db8f0]"}`}>
+                    <Icon name={CATEGORY_ICONS[ev.category] || "Sparkles"} fallback="Sparkles" size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="mb-1 flex flex-wrap items-center gap-2">
+                      <span className="font-sans text-lg font-semibold text-foreground">{ev.year}</span>
+                      <span className="font-mono text-xs text-foreground/50">{getYearsAgo(ev.year)}</span>
+                      <span className="rounded-full bg-foreground/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-foreground/70">{ev.category}</span>
+                    </div>
+                    <p className="text-sm leading-relaxed text-foreground/90">{ev.text}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </section>
 
-        <WorkSection />
-        <ServicesSection />
-        <AboutSection scrollToSection={scrollToSection} />
-        <ContactSection />
+        <footer className="border-t border-foreground/10 px-6 py-8 text-center md:px-12">
+          <p className="font-mono text-xs text-foreground/50">Этот день в истории · машина времени в вашем кармане</p>
+        </footer>
       </div>
-
-      <style>{`
-        div::-webkit-scrollbar {
-          display: none;
-        }
-      `}</style>
     </main>
   )
 }
